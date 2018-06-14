@@ -185,7 +185,8 @@ contains
     real(r8) :: laican      ! canopy sum of lai_z
     real(r8) :: vai			! leaf and stem area in this layer
     real(r8) :: kn			! nitrogen decay coefficient
-    real(r8) :: sla_max     ! Observational constraint on how large sla (m2/gC) can become
+    real(r8) :: sla_max     ! observational constraint on how large sla (m2/gC) can become
+    real(r8) :: tai_to_lai  ! ratio of total area index (ie. sai + lai) to lai for individual tree
 
     !----------------------------------------------------------------------
 
@@ -227,19 +228,34 @@ contains
           ! Observational constraint for maximum sla value (m2/gC):
           ! m2/gC = m2/gBiomass *kgC/kgBiomass 
           sla_max = sla_max_drymass * EDPftvarcon_inst%c2b(ipft) 
+	  
+	  ! Ratio of total area index (ie. lai + sai) to lai for individual tree:
+	  tai_to_lai = 1.0_r8 + EDPftvarcon_inst%allom_sai_scaler(ipft)
 
           !Leaf cost vs netuptake for each leaf layer. 
           do z = 1,nlevleaf
 
-             ! Vegetation area index
-             vai = (currentPatch%elai_profile(cl,ipft,z)+currentPatch%esai_profile(cl,ipft,z))  
-             if (z == 1) then
-                laican = laican + 0.5_r8 * vai
-             else
-                laican = laican + 0.5_r8 * (currentPatch%elai_profile(cl,ipft,z-1)+ &
-                     currentPatch%esai_profile(cl,ipft,z-1)+vai)
-             end if           
-             
+             ! Vegetation area index as function of tree_lai +tree_sai
+	     if(currentCohort%treelai >= z*dinc_ed)then
+                vai = tai_to_lai * dinc_ed
+                if (z == 1) then
+                   laican = laican + 0.5_r8 * vai
+                else
+                   laican = laican + 0.5_r8 * (2.0_r8 * vai)
+                end if
+	     else
+	        ! vai equals the remaining treelai +treesai in the last layer
+	        vai = tai_to_lai * (currentCohort%treelai - (z - 1)*dinc_ed)
+		if(vai < 0.0_r8)then
+		   vai = 0.0_r8
+		end if
+                if (z == 1) then
+                   laican = laican + 0.5_r8 * vai
+                else
+                   laican = laican + 0.5_r8 * (tai_to_lai * dinc_ed + vai )
+                end if		
+             end if
+	     
              if (currentCohort%year_net_uptake(z) /= 999._r8)then !there was activity this year in this leaf layer.
              
                 ! Scale for leaf nitrogen profile
