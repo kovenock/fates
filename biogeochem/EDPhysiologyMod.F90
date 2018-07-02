@@ -163,9 +163,8 @@ contains
     ! Canopy trimming / leaf optimisation. Removes leaves in negative annual carbon balance. 
     !
     ! !USES:
-    use FatesAllometryMod  , only : sla_max_drymass
-    use FatesConstantsMod  , only : g_per_kg 
-
+    !
+    !
     ! !ARGUMENTS    
     type (ed_site_type),intent(inout), target :: currentSite
     !
@@ -179,15 +178,7 @@ contains
     real(r8) :: tar_bl     ! target leaf biomass       (leaves flushed, trimmed)
     real(r8) :: tar_bfr    ! target fine-root biomass  (leaves flushed, trimmed)
     real(r8) :: bfr_per_bleaf ! ratio of fine root per leaf biomass
-    real(r8) :: sla_levleaf ! sla at leaf level z
-    real(r8) :: nscaler_levleaf ! nscaler value at leaf level z
-    integer  :: cl         ! canopy layer index
-    real(r8) :: laican     ! canopy sum of lai_z
-    real(r8) :: vai        ! leaf and stem area in this layer
-    real(r8) :: kn         ! nitrogen decay coefficient
-    real(r8) :: sla_max    ! Observational constraint on how large sla (m2/gC) can become
-    real(r8) :: vai_to_lai ! ratio of vegetation area index (ie. lai+sai) : lai for individual tree
-
+  
     !----------------------------------------------------------------------
 
     currentPatch => currentSite%youngest_patch
@@ -215,82 +206,34 @@ contains
              bfr_per_bleaf = tar_bfr/tar_bl
           endif
 
-          ! Identify current canopy layer (cl)
-          cl = currentCohort%canopy_layer
-          
-          ! Calculate the lai+sai of overlying canopy layers (laican)
-          if (cl==1) then !are we in the top canopy layer or a shaded layer?
-               laican = 0._r8
-          else
-               laican = sum(currentPatch%canopy_layer_tai(1:cl-1)) 
-          end if
-
-          ! Observational constraint for maximum sla value (m2/gC):
-          ! m2/gC = m2/gBiomass *kgC/kgBiomass 
-          sla_max = sla_max_drymass * EDPftvarcon_inst%c2b(ipft)
-	  ! Ratio of vegetation area index (ie. lai+sai) to lai for individual tree:
-          vai_to_lai = 1.0_r8 + (EDPftvarcon_inst%allom_sai_scaler(ipft)/ &
-	     EDPftvarcon_inst%slatop(ipft))
-
           !Leaf cost vs netuptake for each leaf layer. 
-          do z = 1,nlevleaf
-
-             ! Vegetation area index as a function of tree_lai+tree_sai
-	     if(currentCohort%treelai >= (z-1)*dinc_ed)then
-	     ! if tree_lai in this layer is greater than 0
-	        if (z == 1) then
-		   ! If in first layer, add value equal to vai halfway through the layer
-		   ! Here, vai = layer z's tree_lai + tree_sai = vai_to_lai *dinc_ed
-                   laican = laican + 0.5_r8 * vai_to_lai * dinc_ed
-                else
-		   ! Since starting from halfway through first layer when z=1, 
-		   ! we can add vai for an entire layer 
-		   ! to remain at halfway value for subsequent layers. 
-                   laican = laican + vai_to_lai * dinc_ed
-                end if
-	     else ! If tree_lai does not extend into this layer, do not add to laican
-	     end if 
-             
+          do z = 1,nlevleaf         
              if (currentCohort%year_net_uptake(z) /= 999._r8)then !there was activity this year in this leaf layer.
-             
-                ! Scale for leaf nitrogen profile
-                kn = decay_coeff_kn(ipft)
-                ! Nscaler value at leaf level z
-                nscaler_levleaf = exp(-kn * laican)
-                ! Sla value at leaf level z after nitrogen profile scaling (m2/gC)
-                sla_levleaf = EDPftvarcon_inst%slatop(ipft)/nscaler_levleaf
-                
-                if(sla_levleaf > sla_max)then
-                     sla_levleaf = sla_max
-                end if                                
-              
                 !Leaf Cost kgC/m2/year-1
                 !decidous costs. 
                 if (EDPftvarcon_inst%season_decid(ipft) == 1.or. &
                      EDPftvarcon_inst%stress_decid(ipft) == 1)then 
-
-                   ! Leaf cost at leaf level z accounting for sla profile (kgC/m2)
-                   currentCohort%leaf_cost =  1._r8/(sla_levleaf*1000.0_r8)
+		     
+		   currentCohort%leaf_cost = 1._r8/(EDPftvarcon_inst%slatop(ipft)*1000.0_r8)
 
                    if ( int(EDPftvarcon_inst%allom_fmode(ipft)) .eq. 1 ) then
                       ! if using trimmed leaf for fine root biomass allometry, add the cost of the root increment
                       ! to the leaf increment; otherwise do not.
                       currentCohort%leaf_cost = currentCohort%leaf_cost + &
-                           1.0_r8/(sla_levleaf*1000.0_r8) * &
+                           1.0_r8/(EDPftvarcon_inst%slatop(ipft)*1000.0_r8) * &
                            bfr_per_bleaf / EDPftvarcon_inst%root_long(ipft)
                    endif
 
                    currentCohort%leaf_cost = currentCohort%leaf_cost * &
                          (EDPftvarcon_inst%grperc(ipft) + 1._r8)
                 else !evergreen costs
-                   ! Leaf cost at leaf level z accounting for sla profile
-                   currentCohort%leaf_cost = 1.0_r8/(sla_levleaf* &
+                   currentCohort%leaf_cost = 1.0_r8/(EDPftvarcon_inst%slatop(ipft)* &
                         EDPftvarcon_inst%leaf_long(ipft)*1000.0_r8) !convert from sla in m2g-1 to m2kg-1
                    if ( int(EDPftvarcon_inst%allom_fmode(ipft)) .eq. 1 ) then
                       ! if using trimmed leaf for fine root biomass allometry, add the cost of the root increment
                       ! to the leaf increment; otherwise do not.
                       currentCohort%leaf_cost = currentCohort%leaf_cost + &
-                           1.0_r8/(sla_levleaf*1000.0_r8) * &
+                           1.0_r8/(EDPftvarcon_inst%slatop(ipft)*1000.0_r8) * &
                            bfr_per_bleaf / EDPftvarcon_inst%root_long(ipft)
                    endif
                    currentCohort%leaf_cost = currentCohort%leaf_cost * &
