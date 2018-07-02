@@ -73,7 +73,6 @@ module EDPhysiologyMod
   private :: seed_decay
   private :: seed_germination
   public :: flux_into_litter_pools
-  public :: decay_coeff_kn
 
 
   logical, parameter :: DEBUG  = .false. ! local debug flag
@@ -178,7 +177,6 @@ contains
     real(r8) :: tar_bl     ! target leaf biomass       (leaves flushed, trimmed)
     real(r8) :: tar_bfr    ! target fine-root biomass  (leaves flushed, trimmed)
     real(r8) :: bfr_per_bleaf ! ratio of fine root per leaf biomass
-  
     !----------------------------------------------------------------------
 
     currentPatch => currentSite%youngest_patch
@@ -207,7 +205,7 @@ contains
           endif
 
           !Leaf cost vs netuptake for each leaf layer. 
-          do z = 1,nlevleaf         
+          do z = 1,nlevleaf
              if (currentCohort%year_net_uptake(z) /= 999._r8)then !there was activity this year in this leaf layer.
                 !Leaf Cost kgC/m2/year-1
                 !decidous costs. 
@@ -2414,28 +2412,5 @@ contains
         ! write(fates_log(),*)'cdk croot_prof: ', croot_prof
 
     end subroutine flux_into_litter_pools
-
-    
-    real(r8) function decay_coeff_kn(pft)
-    
-      ! ============================================================================
-      ! Decay coefficient (kn) is a function of vcmax25top for each pft.
-      ! ============================================================================
-
-      !ARGUMENTS
-      integer, intent(in) :: pft
-
-      !LOCAL VARIABLES
-      ! -----------------------------------------------------------------------------------
-
-      ! Bonan et al (2011) JGR, 116, doi:10.1029/2010JG001593 used
-      ! kn = 0.11. Here, we derive kn from vcmax25 as in Lloyd et al 
-      ! (2010) Biogeosciences, 7, 1833-1859
-	
-      decay_coeff_kn = exp(0.00963_r8 * EDPftvarcon_inst%vcmax25top(pft) - 2.43_r8)
-
-      return
-
-    end function decay_coeff_kn    
 
 end module EDPhysiologyMod
