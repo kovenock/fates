@@ -93,8 +93,6 @@ module FatesAllometryMod
   use FatesGlobals     , only : fates_log
   use FatesGlobals     , only : endrun => fates_endrun
   use EDTypesMod       , only : nlevleaf, dinc_ed
-  use EDTypesMod       , only : nclmax
-
 
   implicit none
 
