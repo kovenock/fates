@@ -103,6 +103,9 @@ module FatesHistoryInterfaceMod
   ! Indices to site by patch age by pft variables
   integer, private :: ih_biomass_si_agepft
   integer, private :: ih_npp_si_agepft
+  integer, private :: ih_lai_si_agepft
+  integer, private :: ih_trimming_si_agepft
+  integer, private :: ih_crownarea_si_agepft
 
   ! Indices to (site) variables
   integer, private :: ih_nep_si
@@ -285,6 +288,7 @@ module FatesHistoryInterfaceMod
   integer, private :: ih_recruitment_si_pft
   integer, private :: ih_mortality_si_pft
   integer, private :: ih_crownarea_si_pft
+  integer, private :: ih_leafconductance_si_pft
 
 
   ! indices to (site x patch-age) variables
@@ -373,6 +377,8 @@ module FatesHistoryInterfaceMod
   integer, private :: ih_fabi_sha_si_cnlfpft
   integer, private :: ih_parprof_dir_si_cnlfpft
   integer, private :: ih_parprof_dif_si_cnlfpft
+  integer, private :: ih_ts_net_uptake_si_cnlfpft
+  integer, private :: ih_crownarea_si_cnlfpft
 
   ! indices to (site x canopy layer) variables
   integer, private :: ih_parsun_top_si_can
@@ -1272,6 +1278,7 @@ end subroutine flush_hvars
     use FatesSizeAgeTypeIndicesMod, only : get_height_index
     use EDTypesMod        , only : nlevleaf
     use EDParamsMod,           only : ED_val_history_height_bin_edges
+    use EDTypesMod          , only : nclmax
 
     ! Arguments
     class(fates_history_interface_type)             :: this
@@ -1294,7 +1301,7 @@ end subroutine flush_hvars
     integer  :: iscag        ! size-class x age index
     integer  :: iscagpft     ! size-class x age x pft index
     integer  :: iagepft      ! age x pft index
-    integer  :: ican, ileaf, cnlf_indx  ! iterators for leaf and canopy level
+    integer  :: ican, ileaf, cnlf_indx, cnlfpft_indx  ! iterators for leaf and canopy level
     integer  :: height_bin_max, height_bin_min   ! which height bin a given cohort's canopy is in
     integer  :: i_heightbin  ! iterator for height bins
     
@@ -1467,6 +1474,9 @@ end subroutine flush_hvars
                hio_nplant_si_scagpft                => this%hvars(ih_nplant_si_scagpft)%r82d, &
                hio_npp_si_agepft                    => this%hvars(ih_npp_si_agepft)%r82d, &
                hio_biomass_si_agepft                => this%hvars(ih_biomass_si_agepft)%r82d, &
+               hio_lai_si_agepft                    => this%hvars(ih_lai_si_agepft)%r82d, &
+               hio_trimming_si_agepft               => this%hvars(ih_trimming_si_agepft)%r82d, &
+               hio_crownarea_si_agepft              => this%hvars(ih_crownarea_si_agepft)%r82d, &
                hio_yesterdaycanopylevel_canopy_si_scls     => this%hvars(ih_yesterdaycanopylevel_canopy_si_scls)%r82d, &
                hio_yesterdaycanopylevel_understory_si_scls => this%hvars(ih_yesterdaycanopylevel_understory_si_scls)%r82d, &
                hio_area_si_age         => this%hvars(ih_area_si_age)%r82d, &
@@ -1486,6 +1496,7 @@ end subroutine flush_hvars
                hio_cwd_ag_out_si_cwdsc              => this%hvars(ih_cwd_ag_out_si_cwdsc)%r82d, &
                hio_cwd_bg_out_si_cwdsc              => this%hvars(ih_cwd_bg_out_si_cwdsc)%r82d, &
                hio_crownarea_si_cnlf                => this%hvars(ih_crownarea_si_cnlf)%r82d, &
+               hio_crownarea_si_cnlfpft             => this%hvars(ih_crownarea_si_cnlfpft)%r82d, &
                hio_crownarea_si_can                 => this%hvars(ih_crownarea_si_can)%r82d, &
                hio_nplant_si_scag                   => this%hvars(ih_nplant_si_scag)%r82d, &
                hio_nplant_canopy_si_scag            => this%hvars(ih_nplant_canopy_si_scag)%r82d, &
@@ -1784,6 +1795,15 @@ end subroutine flush_hvars
                     hio_biomass_si_agepft(io_si,iagepft) = hio_biomass_si_agepft(io_si,iagepft) + &
                          ccohort%b_total() * ccohort%n * AREA_INV
 
+                    hio_lai_si_agepft(io_si, iagepft) = hio_lai_si_agepft(io_si, iagepft) + &
+                         ccohort%lai
+
+                    hio_trimming_si_agepft(io_si, iagepft) = hio_trimming_si_agepft(io_si, iagepft) + &
+                         ccohort%canopy_trim * ccohort%c_area
+
+                    hio_crownarea_si_agepft(io_si, iagepft) = hio_crownarea_si_agepft(io_si, iagepft) + &
+                         ccohort%c_area
+
                     ! update SCPF/SCLS- and canopy/subcanopy- partitioned quantities
                     if (ccohort%canopy_layer .eq. 1) then
                        hio_nplant_canopy_si_scag(io_si,iscag) = hio_nplant_canopy_si_scag(io_si,iscag) + ccohort%n
@@ -1985,7 +2005,10 @@ end subroutine flush_hvars
                !
                do ileaf=1,ccohort%nv
                   cnlf_indx = ileaf + (ican-1) * nlevleaf
+                  cnlfpft_indx = ileaf + (ican-1) * nlevleaf + (ccohort%pft-1) * nlevleaf * nclmax
                   hio_crownarea_si_cnlf(io_si, cnlf_indx) = hio_crownarea_si_cnlf(io_si, cnlf_indx) + &
+                       ccohort%c_area / AREA
+                  hio_crownarea_si_cnlfpft(io_si, cnlfpft_indx) = hio_crownarea_si_cnlfpft(io_si, cnlfpft_indx) + &
                        ccohort%c_area / AREA
                end do
                
@@ -2268,10 +2291,12 @@ end subroutine flush_hvars
                hio_gpp_si_age         => this%hvars(ih_gpp_si_age)%r82d, &
                hio_npp_si_age         => this%hvars(ih_npp_si_age)%r82d, &
                hio_c_stomata_si_age   => this%hvars(ih_c_stomata_si_age)%r82d, &
+               hio_leafconductance_si_pft  => this%hvars(ih_leafconductance_si_pft)%r82d, &
                hio_c_lblayer_si_age   => this%hvars(ih_c_lblayer_si_age)%r82d, &
                hio_parsun_z_si_cnlf     => this%hvars(ih_parsun_z_si_cnlf)%r82d, &
                hio_parsha_z_si_cnlf     => this%hvars(ih_parsha_z_si_cnlf)%r82d, &
                hio_ts_net_uptake_si_cnlf => this%hvars(ih_ts_net_uptake_si_cnlf)%r82d, &
+               hio_ts_net_uptake_si_cnlfpft => this%hvars(ih_ts_net_uptake_si_cnlfpft)%r82d, &
                hio_parsun_z_si_cnlfpft  => this%hvars(ih_parsun_z_si_cnlfpft)%r82d, &
                hio_parsha_z_si_cnlfpft  => this%hvars(ih_parsha_z_si_cnlfpft)%r82d, &
                hio_laisun_z_si_cnlf     => this%hvars(ih_laisun_z_si_cnlf)%r82d, &
@@ -2416,7 +2441,10 @@ end subroutine flush_hvars
                   hio_ar_frootm_si_scpf(io_si,scpf) = hio_ar_frootm_si_scpf(io_si,scpf) + &
                         ccohort%froot_mr * n_perm2  * sec_per_day * days_per_year
 
-                  
+                  ! calculate total leaf conductance of each PFT in units of [m/s] *[m2]
+                  hio_leafconductance_si_pft(io_si,ccohort%pft) = &
+                       hio_leafconductance_si_pft(io_si,ccohort%pft) + &
+                       ccohort%g_sb_laweight
 
 
                   ! accumulate fluxes per patch age bin
@@ -2476,7 +2504,11 @@ end subroutine flush_hvars
                ican = ccohort%canopy_layer
                do ileaf=1,ccohort%nv
                   cnlf_indx = ileaf + (ican-1) * nlevleaf
+                  cnlfpft_indx = ileaf + (ican-1) * nlevleaf + (ccohort%pft-1) * nlevleaf * nclmax
                   hio_ts_net_uptake_si_cnlf(io_si, cnlf_indx) = hio_ts_net_uptake_si_cnlf(io_si, cnlf_indx) + &
+                       ccohort%ts_net_uptake(ileaf) * g_per_kg * per_dt_tstep * ccohort%c_area / AREA
+                  hio_ts_net_uptake_si_cnlfpft(io_si, cnlfpft_indx) = &
+                       hio_ts_net_uptake_si_cnlfpft(io_si, cnlfpft_indx) + &
                        ccohort%ts_net_uptake(ileaf) * g_per_kg * per_dt_tstep * ccohort%c_area / AREA
                end do
 
@@ -3108,6 +3140,11 @@ end subroutine flush_hvars
          avgflag='A', vtype=site_pft_r8, hlms='CLM:ALM', flushval=0.0_r8, upfreq=1, &
          ivar=ivar, initialize=initialize_variables, index = ih_mortality_si_pft )
 
+    call this%set_history_var(vname='LEAFCONDUCTANCE_PFT',  units='m/s * m2',            &
+         long='total leaf conductance (stomatal plus leaf boundary layer) per PFT', use_default='inactive',       &
+         avgflag='A', vtype=site_pft_r8, hlms='CLM:ALM', flushval=0.0_r8, upfreq=2, &
+         ivar=ivar, initialize=initialize_variables, index = ih_leafconductance_si_pft )
+
     ! patch age class variables
     call this%set_history_var(vname='PATCH_AREA_BY_AGE', units='m2/m2',             &
          long='patch area by age bin', use_default='active',                     &
@@ -3578,11 +3615,23 @@ end subroutine flush_hvars
          avgflag='A', vtype=site_cnlf_r8, hlms='CLM:ALM', flushval=0.0_r8, upfreq=2,   &
          ivar=ivar, initialize=initialize_variables, index = ih_ts_net_uptake_si_cnlf )
 
+    call this%set_history_var(vname='NET_C_UPTAKE_CNLFPFT', units='gC/m2/s',                 &
+         long='net carbon uptake by each canopy and leaf layer per unit ground area (i.e. divide by CROWNAREA_CNLFPFT to make per leaf area)', &
+         use_default='inactive',       &
+         avgflag='A', vtype=site_cnlfpft_r8, hlms='CLM:ALM', flushval=0.0_r8, upfreq=2,   &
+         ivar=ivar, initialize=initialize_variables, index = ih_ts_net_uptake_si_cnlfpft )
+
     call this%set_history_var(vname='CROWNAREA_CNLF', units='m2/m2',                 &
          long='total crown area that is occupied by leaves in each canopy and leaf layer', &
          use_default='inactive',       &
          avgflag='A', vtype=site_cnlf_r8, hlms='CLM:ALM', flushval=0.0_r8, upfreq=1,   &
          ivar=ivar, initialize=initialize_variables, index = ih_crownarea_si_cnlf )
+
+    call this%set_history_var(vname='CROWNAREA_CNLFPFT', units='m2/m2',                 &
+         long='total crown area of a given PFT that is occupied by leaves in each canopy and leaf layer', &
+         use_default='inactive',       &
+         avgflag='A', vtype=site_cnlfpft_r8, hlms='CLM:ALM', flushval=0.0_r8, upfreq=1,   &
+         ivar=ivar, initialize=initialize_variables, index = ih_crownarea_si_cnlfpft )
 
     call this%set_history_var(vname='CROWNAREA_CAN', units='m2/m2',                 &
          long='total crown area in each canopy layer', &
@@ -3663,6 +3712,21 @@ end subroutine flush_hvars
           long='biomass per PFT in each age bin', use_default='inactive',   &
           avgflag='A', vtype=site_agepft_r8, hlms='CLM:ALM', flushval=0.0_r8,    &
           upfreq=1, ivar=ivar, initialize=initialize_variables, index = ih_biomass_si_agepft )
+
+    call this%set_history_var(vname='LAI_AGEPFT',units = 'm2/m2',               &
+          long='LAI per PFT in each age bin', use_default='inactive',   &
+          avgflag='A', vtype=site_agepft_r8, hlms='CLM:ALM', flushval=0.0_r8,    &
+          upfreq=1, ivar=ivar, initialize=initialize_variables, index = ih_lai_si_agepft )
+
+    call this%set_history_var(vname='TRIMMING_AGEPFT',units = 'unitless * m2',               &
+          long='trimming by PFT in each age bin (divide by CROWNAREA_AGEPFT to use)', use_default='inactive',   &
+          avgflag='A', vtype=site_agepft_r8, hlms='CLM:ALM', flushval=0.0_r8,    &
+          upfreq=1, ivar=ivar, initialize=initialize_variables, index = ih_trimming_si_agepft )
+
+    call this%set_history_var(vname='CROWNAREA_AGEPFT',units = 'm2',               &
+          long='crown area of eact PFT in each age bin', use_default='inactive',   &
+          avgflag='A', vtype=site_agepft_r8, hlms='CLM:ALM', flushval=0.0_r8,    &
+          upfreq=1, ivar=ivar, initialize=initialize_variables, index = ih_crownarea_si_agepft )
 
 
     ! Carbon Flux (grid dimension x scpf) (THESE ARE DEFAULT INACTIVE!!!
